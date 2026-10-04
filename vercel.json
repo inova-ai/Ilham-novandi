@@ -2,7 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
   "functions": {
-    "api/*.js": {
+    "api/binance.js": {
+      "maxDuration": 10
+    },
+    "api/health.js": {
       "maxDuration": 10
     }
   }

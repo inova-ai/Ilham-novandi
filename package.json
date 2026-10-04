@@ -1,11 +1,11 @@
 {
   "name": "ilham-novandi-trading-terminal",
-  "version": "8.2.0",
+  "version": "8.5.0",
   "private": true,
   "engines": {
     "node": "24.x"
   },
   "scripts": {
-    "check": "node --check api/binance.js"
+    "check": "node --check api/binance.js && node --check api/health.js"
   }
 }
