@@ -5,7 +5,7 @@ function json(res, status, body) {
 }
 
 const DAY_MS = 86400000;
-const MAX_DAYS = 7;
+const MAX_DAYS = 5;
 
 function intervalToMs(interval) {
   const m = String(interval).match(/^(\d+)(s|m|h|d|w)$/i);
@@ -44,11 +44,11 @@ async function fetchDay(symbol, interval, day) {
   const file = `${symbol}-${interval}-${day}.zip`;
   const url = `https://data.binance.vision/data/futures/um/daily/klines/${encodeURIComponent(symbol)}/${encodeURIComponent(interval)}/${file}`;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 7000);
+  const timer = setTimeout(() => controller.abort(), 5000);
   try {
     const r = await fetch(url, { headers: { 'User-Agent': 'ilham-novandi/8.5.2', 'Accept': 'application/zip' }, cache: 'no-store', signal: controller.signal });
-    if (!r.ok) return { day, rows: [], status: r.status };
-    return { day, rows: parseCsv(new Uint8Array(await r.arrayBuffer()), symbol, interval), status: 200 };
+    if (!r.ok) return { day, rows: [], status: r.status, url };
+    return { day, rows: parseCsv(new Uint8Array(await r.arrayBuffer()), symbol, interval), status: 200, url };
   } finally {
     clearTimeout(timer);
   }
@@ -73,7 +73,7 @@ module.exports = async function handler(req, res) {
   const limit = Math.min(Math.max(Number(req.query?.limit || 260), 1), 1500);
   try {
     const klines = await getHistorical(symbol, interval, limit);
-    if (!klines.length) return json(res, 502, { ok:false, error:'Binance Vision tidak menemukan arsip Futures untuk '+symbol+' '+interval, source:'binance-vision-futures' });
+    if (!klines.length) return json(res, 502, { ok:false, error:'Binance Vision tidak menemukan arsip Futures untuk '+symbol+' '+interval, source:'binance-vision-futures', daysChecked: MAX_DAYS });
     const last = klines.at(-1);
     const prev = klines.length > 1 ? klines.at(-2) : last;
     const lastClose = Number(last[4]), prevClose = Number(prev[4]);

@@ -67,7 +67,7 @@ async function handler(req, res) {
     return json(res, 200, {
       ok: true,
       service: 'binance-api',
-      version: '8.6.0',
+      version: '8.7.0',
       marketBaseUrl: MARKET_BASE_URL
     });
   }
@@ -155,7 +155,7 @@ async function handler(req, res) {
   return json(res, 404, {
     ok: false,
     error: 'Unknown action',
-    available: ['ping', 'market', 'market24']
+    available: ['ping', 'config', 'proxy', 'market', 'market24']
   });
 }
 
