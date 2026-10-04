@@ -7,6 +7,9 @@
     },
     "api/health.js": {
       "maxDuration": 10
+    },
+    "api/candles.js": {
+      "maxDuration": 10
     }
   },
   "rewrites": [
@@ -17,6 +20,10 @@
     {
       "source": "/api/health",
       "destination": "/api/health.js"
+    },
+    {
+      "source": "/api/candles",
+      "destination": "/api/candles.js"
     }
   ]
 }
