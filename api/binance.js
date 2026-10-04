@@ -72,7 +72,7 @@ function validateQuantity(q) {
 async function marketFetch(path, params={}) {
   const query = encodeParams(params);
   const url = MARKET_BASE_URL + path + (query ? '?' + query : '');
-  const r = await fetch(url, { method:'GET', headers:{'Accept':'application/json','User-Agent':'ilham-novandi/8.4'}, cache:'no-store' });
+  const r = await fetch(url, { method:'GET', headers:{'Accept':'application/json','User-Agent':'ilham-novandi/8.5'}, cache:'no-store' });
   const text = await r.text();
   let data;
   try { data = JSON.parse(text); } catch { data = { msg: text }; }
@@ -254,6 +254,9 @@ module.exports = async (req, res) => {
     const action = String(req.query.action || 'status');
     if (req.method === 'GET' && action === 'market') return json(res, 200, await publicMarket((req.query || {}).symbol || 'BTCUSDT', (req.query || {}).interval || '15m', (req.query || {}).limit || 260));
     if (req.method === 'GET' && action === 'market24') return json(res, 200, await publicMarket24());
+    if (req.method === 'GET' && action === 'ping') {
+      return json(res, 200, { ok: true, service: 'binance-api', version: '8.5.0', route: '/api/binance', timestamp: new Date().toISOString() });
+    }
     if (req.method === 'GET' && action === 'status') {
       return json(res, 200, { configured: Boolean(API_KEY && API_SECRET), liveEnabled: LIVE_ENABLED, baseUrl: BASE_URL, maxNotionalUSDT: MAX_NOTIONAL_USDT });
     }
