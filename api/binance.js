@@ -29,7 +29,7 @@ async function marketFetch(path) {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'User-Agent': 'ilham-novandi/8.5.2'
+          'User-Agent': 'ilham-novandi/8.5.3'
         },
         cache: 'no-store',
         signal: controller.signal
@@ -67,7 +67,7 @@ async function handler(req, res) {
     return json(res, 200, {
       ok: true,
       service: 'binance-api',
-      version: '8.5.2',
+      version: '8.5.3',
       marketBaseUrl: MARKET_BASE_URL
     });
   }

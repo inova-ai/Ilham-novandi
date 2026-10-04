@@ -5,7 +5,7 @@ function json(res, status, body) {
 }
 
 const DAY_MS = 86400000;
-const MAX_DAYS = 7;
+const MAX_DAYS = 4;
 
 function intervalToMs(interval) {
   const m = String(interval).match(/^(\d+)(s|m|h|d|w)$/i);
@@ -42,16 +42,27 @@ function parseCsv(bytes, symbol, interval) {
 
 async function fetchDay(symbol, interval, day) {
   const file = `${symbol}-${interval}-${day}.zip`;
-  const url = `https://data.binance.vision/data/futures/um/daily/klines/${encodeURIComponent(symbol)}/${encodeURIComponent(interval)}/${file}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 7000);
-  try {
-    const r = await fetch(url, { headers: { 'User-Agent': 'ilham-novandi/8.5.2', 'Accept': 'application/zip' }, cache: 'no-store', signal: controller.signal });
-    if (!r.ok) return { day, rows: [], status: r.status };
-    return { day, rows: parseCsv(new Uint8Array(await r.arrayBuffer()), symbol, interval), status: 200 };
-  } finally {
-    clearTimeout(timer);
+  const urls = [
+    `https://data.binance.vision/data/futures/um/daily/klines/${encodeURIComponent(symbol)}/${encodeURIComponent(interval)}/${file}`,
+    `https://s3-ap-northeast-1.amazonaws.com/data.binance.vision/data/futures/um/daily/klines/${encodeURIComponent(symbol)}/${encodeURIComponent(interval)}/${file}`
+  ];
+  let lastStatus = 0;
+  for (const url of urls) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4500);
+    try {
+      const r = await fetch(url, { headers: { 'User-Agent': 'ilham-novandi/8.5.3', 'Accept': 'application/zip' }, cache: 'no-store', signal: controller.signal });
+      lastStatus = r.status;
+      if (!r.ok) continue;
+      const rows = parseCsv(new Uint8Array(await r.arrayBuffer()), symbol, interval);
+      if (rows.length) return { day, rows, status: 200, url };
+    } catch (_) {
+      // Try the second official Binance archive host.
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  return { day, rows: [], status: lastStatus || 0 };
 }
 
 async function getHistorical(symbol, interval, limit) {
