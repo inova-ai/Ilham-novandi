@@ -1,4 +1,4 @@
-# Ilham Novandi V8.5.1 — Vercel API Route Fix
+# Ilham Novandi V8.5.2 — Vercel API Route Fix
 
 IMPORTANT: deploy the CONTENTS of this ZIP as the Vercel project root.
 The `api/` directory must be directly beside `index.html`, `package.json`, and `vercel.json`.

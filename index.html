@@ -110,7 +110,7 @@
   resizeChartCanvas();
   const toast = msg => { $('toast').textContent=msg; $('toast').classList.add('show'); setTimeout(()=>$('toast').classList.remove('show'),2200); };
   const api = async (path) => {
-    const urls = ['https://fapi.binance.com'+path, 'https://fapi.binance.com'+path.replace('/fapi/v1/','/fapi/v1/')];
+    const urls = ['https://fapi.binance.com'+path];
     let last;
     for(const url of urls){ try { const r=await fetch(url,{cache:'no-store',mode:'cors'}); if(!r.ok){last=new Error('Binance API '+r.status);continue;} return await r.json(); } catch(e){last=e;} }
     throw last || new Error('Binance API tidak dapat diakses');
@@ -136,7 +136,7 @@
     // ticker access just to render candles that are already stored in Neon.
     try {
       const db=await neonApi(symbol,interval,limit);
-      if(Array.isArray(db.candles) && db.candles.length>=Math.min(limit,20)) {
+      if(Array.isArray(db.candles) && db.candles.length>=1) {
         const klines=db.candles.map(c=>[Number(c.time)*1000,c.open,c.high,c.low,c.close,c.volume]);
         const last=db.candles.at(-1);
         let ticker={lastPrice:last.close,highPrice:last.high,lowPrice:last.low,volume:last.volume,priceChangePercent:'0'};
@@ -157,7 +157,7 @@
     const ticker=data.ticker||null;
     const candles=klines.map(k=>({time:Number(k[0])/1000,open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5],closed:Number(k[6])<=Date.now()}));
     await saveNeonCandles(symbol,interval,candles);
-    return {symbol,interval,klines,ticker,source:'binance-futures-seed-neon'};
+    return {symbol,interval,klines,ticker,source:data.source||'binance-futures-seed-neon'};
   };
   const market24 = async () => { const r=await fetch('/api/binance?action=market24'); const data=await r.json().catch(()=>({error:'Ticker response tidak valid'})); if(!r.ok) throw new Error(data.error||'Ticker proxy error'); return data; };
   let pollTimer=null, realtimeConnected=false;

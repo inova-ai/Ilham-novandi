@@ -21,3 +21,9 @@ Run `db/schema.sql` in the Neon SQL Editor. The API also creates the table autom
 - WebSocket/poll updates are also persisted to Neon.
 
 This avoids storing the Neon database password in frontend code.
+
+## Binance Futures archive fallback
+
+If the Vercel server receives HTTP 451 from Binance Futures REST, the chart can seed from Binance's official USD-M Futures public archive at `data.binance.vision`. This remains Binance Futures data; no Bybit/other exchange is used. Once seeded, candles are stored in Neon PostgreSQL and the chart reads Neon first.
+
+The fallback requires the `fflate` dependency already included in `package.json`.
