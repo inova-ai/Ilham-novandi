@@ -1,29 +1,30 @@
-# Neon candle database setup
+# Neon + Binance Futures candle architecture (v8.6.0)
 
-## 1. Create the Neon database
-Open Neon Console and create/select a PostgreSQL project.
+## Environment variables
 
-## 2. Add DATABASE_URL to Vercel
-Copy the Neon connection string from **Connect** and add it in Vercel:
+```env
+TRADING_MODE=demo
+ENABLE_LIVE_TRADING=false
 
-`DATABASE_URL=postgresql://...`
+BINANCE_BASE_URL=https://fapi.binance.com
+BINANCE_WS_URL=wss://fstream.binance.com
+BINANCE_MARKET_BASE_URL=https://fapi.binance.com
+BINANCE_MARKET_WS_URL=wss://fstream.binance.com/market
+BINANCE_PUBLIC_WS_URL=wss://fstream.binance.com/public
+BINANCE_PRIVATE_WS_URL=wss://fstream.binance.com/private
 
-Do not put this value in `index.html` or expose it to the browser.
+DATABASE_URL=postgresql://USER:PASSWORD@HOST/DB?sslmode=require
+NODE_ENV=production
+```
 
-## 3. Optional: create the table manually
-Run `db/schema.sql` in the Neon SQL Editor. The API also creates the table automatically on first request.
+`PORT=3000` is not needed on Vercel.
 
-## 4. How this build works
-- Browser gets Binance Futures candles only as the market-data ingestion source.
-- Browser sends candles to `/api/candles?action=upsert`.
-- `/api/candles?action=latest` reads candle history from Neon PostgreSQL.
-- The chart renders the Neon candle history.
-- WebSocket/poll updates are also persisted to Neon.
+## Flow
 
-This avoids storing the Neon database password in frontend code.
+1. Chart history is read from Neon first.
+2. If Neon is empty, the server requests Binance USD-M Futures history.
+3. Live updates use `BINANCE_MARKET_WS_URL` and the Binance Futures `BTCUSDT@kline_15m` stream.
+4. Every realtime candle is upserted into Neon.
+5. If the live REST ticker is unavailable, the chart still renders using the latest Neon candle.
 
-## Binance Futures archive fallback
-
-If the Vercel server receives HTTP 451 from Binance Futures REST, the chart can seed from Binance's official USD-M Futures public archive at `data.binance.vision`. This remains Binance Futures data; no Bybit/other exchange is used. Once seeded, candles are stored in Neon PostgreSQL and the chart reads Neon first.
-
-The fallback requires the `fflate` dependency already included in `package.json`.
+This build does not switch market data to Bybit or another exchange.
