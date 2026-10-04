@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 
 const BASE_URL = process.env.BINANCE_BASE_URL || 'https://fapi.binance.com';
+const MARKET_BASE_URL = process.env.BINANCE_MARKET_BASE_URL || 'https://fapi.binance.com';
 const API_KEY = process.env.BINANCE_API_KEY;
 const API_SECRET = process.env.BINANCE_API_SECRET;
 const LIVE_ENABLED = process.env.LIVE_TRADING_ENABLED === 'true';
@@ -68,20 +69,34 @@ function validateQuantity(q) {
 }
 
 
+async function marketFetch(path, params={}) {
+  const query = encodeParams(params);
+  const url = MARKET_BASE_URL + path + (query ? '?' + query : '');
+  const r = await fetch(url, { method:'GET', headers:{'Accept':'application/json','User-Agent':'ilham-novandi/8.4'}, cache:'no-store' });
+  const text = await r.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = { msg: text }; }
+  if (!r.ok) {
+    const err = new Error(data.msg || `Binance market HTTP ${r.status}`);
+    err.status = r.status; err.binance = data; throw err;
+  }
+  return data;
+}
+
 async function publicMarket(symbol, interval='15m', limit=260) {
   const sym = validateSymbol(symbol);
   const allowed = new Set(['1m','3m','5m','15m','30m','1h','2h','4h','6h','8h','12h','1d']);
   if (!allowed.has(interval)) throw new Error('Interval tidak didukung.');
   const lim = Math.max(1, Math.min(Number(limit) || 260, 500));
   const [klines, ticker] = await Promise.all([
-    binance('GET', '/fapi/v1/klines', { symbol: sym, interval, limit: lim }, false),
-    binance('GET', '/fapi/v1/ticker/24hr', { symbol: sym }, false),
+    marketFetch('/fapi/v1/klines', { symbol: sym, interval, limit: lim }),
+    marketFetch('/fapi/v1/ticker/24hr', { symbol: sym }),
   ]);
-  return { symbol: sym, interval, klines, ticker };
+  return { symbol: sym, interval, klines, ticker, source:'binance-futures-rest' };
 }
 
 async function publicMarket24() {
-  return binance('GET', '/fapi/v1/ticker/24hr', {}, false);
+  return marketFetch('/fapi/v1/ticker/24hr', {});
 }
 
 async function account() {
