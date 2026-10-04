@@ -136,7 +136,7 @@
     // ticker access just to render candles that are already stored in Neon.
     try {
       const db=await neonApi(symbol,interval,limit);
-      if(Array.isArray(db.candles) && db.candles.length>=1) {
+      if(Array.isArray(db.candles) && db.candles.length>=20) {
         const klines=db.candles.map(c=>[Number(c.time)*1000,c.open,c.high,c.low,c.close,c.volume]);
         const last=db.candles.at(-1);
         let ticker={lastPrice:last.close,highPrice:last.high,lowPrice:last.low,volume:last.volume,priceChangePercent:'0'};
@@ -152,7 +152,16 @@
     // It is proxied through Vercel so the browser does not need direct CORS access.
     const r=await fetch('/api/binance?action=market&'+q,{cache:'no-store'});
     const data=await r.json().catch(()=>({error:'Binance response tidak valid'}));
-    if(!r.ok || !data.ok) throw new Error(data.error || ('Binance HTTP '+r.status));
+    if(!r.ok || !data.ok) {
+      // Explicit second path: Binance official USD-M Futures public archive.
+      // This remains Binance Futures data; it is only a historical bootstrap.
+      const hr=await fetch('/api/binance-history?'+q,{cache:'no-store'});
+      const hd=await hr.json().catch(()=>({error:'Binance archive response tidak valid'}));
+      if(!hr.ok || !hd.ok) throw new Error((data.error||('Binance HTTP '+r.status))+' · Archive: '+(hd.error||('HTTP '+hr.status)));
+      const candles=(hd.klines||[]).map(k=>({time:Number(k[0])/1000,open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5],closed:true}));
+      await saveNeonCandles(symbol,interval,candles);
+      return {symbol,interval,klines:hd.klines||[],ticker:hd.ticker||null,source:'binance-futures-public-archive-neon'};
+    }
     const klines=data.klines||[];
     const ticker=data.ticker||null;
     const candles=klines.map(k=>({time:Number(k[0])/1000,open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5],closed:Number(k[6])<=Date.now()}));
@@ -258,7 +267,7 @@
       candleSeries.setData(currentData); const ema=calcEMA(currentData.map(x=>x.close));state.ema20=ema;emaSeries.setData(currentData.map((x,i)=>({time:x.time,value:ema[i]}))); chart.timeScale().fitContent(); updateHeader(t); analyze(); renderSR(); renderOverlay();
       $('ohlc').textContent='O '+fmtIDR(currentData.at(-1).open*16000)+' H '+fmtIDR(currentData.at(-1).high*16000)+' L '+fmtIDR(currentData.at(-1).low*16000)+' C '+fmtIDR(currentData.at(-1).close*16000);
     }catch(e){
-      $('ohlc').textContent='Binance Futures: '+e.message;
+      $('ohlc').textContent='Binance Futures/Neon: '+e.message;
       $('chartSignal').textContent='BINANCE DATA ERROR';
       drawChart();
       toast('Market data gagal: '+e.message);

@@ -1,11 +1,10 @@
-# Ilham Novandi V8.5.2 — Vercel API Route Fix
+# ILHAM NOVANDI AI TRADING SYSTEM 8.5.3
 
-IMPORTANT: deploy the CONTENTS of this ZIP as the Vercel project root.
-The `api/` directory must be directly beside `index.html`, `package.json`, and `vercel.json`.
+Binance Futures tetap menjadi satu-satunya sumber market data dan trading. Chart memakai Neon PostgreSQL sebagai cache/database candle. Jika REST Binance Futures terkena HTTP 451, bootstrap candle memakai arsip resmi Binance USD-M Futures (data.binance.vision / official S3 mirror), lalu disimpan ke Neon. Tidak menggunakan Bybit.
 
-Test after deployment:
-1. /api/health
-2. /api/binance?action=ping
-3. /api/binance?action=market&symbol=BTCUSDT&interval=15m&limit=3
+## Vercel Environment
 
-Do not place this project inside another wrapper folder.
+Wajib:
+- `DATABASE_URL` = connection string Neon PostgreSQL.
+
+API key/secret Binance hanya diperlukan jika fitur LIVE trading di project memang digunakan.
