@@ -1,11 +1,5 @@
-# ILHAM NOVANDI AI TRADING SYSTEM v8.6.0
+# ILHAM NOVANDI AI TRADING SYSTEM v8.7.0
 
-Binance Futures 100% + Neon PostgreSQL candle database.
+Binance Futures-only trading terminal with Neon PostgreSQL candle storage.
 
-Use the `.env.example` values in Vercel. Set `DATABASE_URL` to the Neon connection string.
-
-Trading remains demo/paper by default:
-`TRADING_MODE=demo`
-`ENABLE_LIVE_TRADING=false`
-
-The chart uses Binance Futures WebSocket market data via `BINANCE_MARKET_WS_URL`, stores candles in Neon, and reads Neon history first.
+See `README-NEON.md` for deployment and candle-data architecture.

@@ -1,2 +1,1 @@
-ILHAM NOVANDI AI TRADING SYSTEM v8.6.0
-Binance Futures WebSocket + Neon candle architecture
+8.7.0 - Binance Futures WebSocket independent + Neon candle database + Binance Futures archive bootstrap
