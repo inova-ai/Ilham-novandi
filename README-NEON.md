@@ -1,4 +1,4 @@
-# ILHAM NOVANDI AI TRADING SYSTEM — v8.7.0
+# ILHAM NOVANDI AI TRADING SYSTEM — v8.7.1
 
 ## Binance Futures + Neon candle database
 
