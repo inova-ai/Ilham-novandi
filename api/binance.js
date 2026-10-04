@@ -43,6 +43,9 @@ async function marketFetch(path) {
         err.details = data;
         err.base = base;
         lastError = err;
+        // HTTP 451 means the request is explicitly restricted by Binance.
+        // Trying every fapi hostname only wastes the Vercel function timeout.
+        if (r.status === 451) throw err;
         continue;
       }
       return data;
@@ -67,7 +70,7 @@ async function handler(req, res) {
     return json(res, 200, {
       ok: true,
       service: 'binance-api',
-      version: '8.7.0',
+      version: '8.7.1',
       marketBaseUrl: MARKET_BASE_URL
     });
   }
@@ -87,6 +90,19 @@ async function handler(req, res) {
     } catch (err) {
       return json(res, 502, {ok:false,error:err.message || 'Binance proxy failed',details:err.details || null});
     }
+  }
+
+  if (action === 'history') {
+    const symbol = String(req.query?.symbol || 'BTCUSDT').toUpperCase();
+    const interval = String(req.query?.interval || '15m');
+    const limit = Math.min(Math.max(Number(req.query?.limit || 260), 1), 1500);
+    try {
+      const historyReq = { method:'GET', query:{ symbol, interval, limit } };
+      let result;
+      const fakeRes = { status(code){this.code=code;return this;}, setHeader(){return this;}, json(body){result={code:this.code||200,body};return this;} };
+      await binanceHistory(historyReq, fakeRes);
+      return json(res, result?.code || 502, result?.body || {ok:false,error:'Binance history unavailable'});
+    } catch (err) { return json(res,502,{ok:false,error:err.message||'Binance history failed'}); }
   }
 
   if (action === 'market') {
@@ -155,7 +171,7 @@ async function handler(req, res) {
   return json(res, 404, {
     ok: false,
     error: 'Unknown action',
-    available: ['ping', 'config', 'proxy', 'market', 'market24']
+    available: ['ping', 'config', 'proxy', 'history', 'market', 'market24']
   });
 }
 

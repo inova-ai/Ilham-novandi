@@ -5,88 +5,80 @@ function json(res, status, body) {
 }
 
 const DAY_MS = 86400000;
-const MAX_DAYS = 5;
+const MAX_DAYS = 7;
+const FETCH_TIMEOUT_MS = 12000;
 
-function intervalToMs(interval) {
-  const m = String(interval).match(/^(\d+)(s|m|h|d|w)$/i);
-  if (!m) return 15 * 60 * 1000;
-  const n = Number(m[1]);
-  const unit = m[2].toLowerCase();
-  return n * ({s:1000,m:60000,h:3600000,d:86400000,w:604800000}[unit] || 900000);
-}
+function isoDay(d) { return d.toISOString().slice(0, 10); }
 
-function isoDay(d) {
-  return d.toISOString().slice(0, 10);
-}
-
-function parseCsv(bytes, symbol, interval) {
+function parseCsv(bytes) {
   const files = unzipSync(bytes);
   const name = Object.keys(files).find(k => /\.csv$/i.test(k)) || Object.keys(files)[0];
   if (!name) return [];
   const text = strFromU8(files[name]);
-  const rows = text.split(/\r?\n/);
   const out = [];
-  for (const line of rows) {
+  for (const line of text.split(/\r?\n/)) {
     if (!line || line[0] === '#') continue;
     const p = line.split(',');
     if (p.length < 7) continue;
-    const t = Number(p[0]);
-    const o = Number(p[1]), h = Number(p[2]), l = Number(p[3]), c = Number(p[4]), v = Number(p[5]);
-    const closeTime = Number(p[6]);
-    if (![t,o,h,l,c,v,closeTime].every(Number.isFinite)) continue;
-    // Binance public futures archives use milliseconds for USD-M kline timestamps.
-    out.push([t,o.toString(),h.toString(),l.toString(),c.toString(),v.toString(),closeTime,'0',0,'0','0','0']);
+    const nums = p.slice(0, 7).map(Number);
+    if (!nums.every(Number.isFinite)) continue;
+    const [t,o,h,l,c,v,closeTime] = nums;
+    if (t <= 0 || o <= 0 || h <= 0 || l <= 0 || c <= 0 || h < l) continue;
+    out.push([t,String(o),String(h),String(l),String(c),String(v),closeTime,'0',0,'0','0','0']);
   }
   return out;
 }
 
+async function fetchBytes(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const r = await fetch(url, {
+      headers: { 'User-Agent': 'ilham-novandi/8.7.1', 'Accept': 'application/zip' },
+      cache: 'no-store', signal: controller.signal
+    });
+    if (!r.ok) return { ok:false, status:r.status };
+    return { ok:true, status:200, bytes:new Uint8Array(await r.arrayBuffer()) };
+  } finally { clearTimeout(timer); }
+}
+
 async function fetchDay(symbol, interval, day) {
   const file = `${symbol}-${interval}-${day}.zip`;
-  const url = `https://data.binance.vision/data/futures/um/daily/klines/${encodeURIComponent(symbol)}/${encodeURIComponent(interval)}/${file}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const r = await fetch(url, { headers: { 'User-Agent': 'ilham-novandi/8.5.2', 'Accept': 'application/zip' }, cache: 'no-store', signal: controller.signal });
-    if (!r.ok) return { day, rows: [], status: r.status, url };
-    return { day, rows: parseCsv(new Uint8Array(await r.arrayBuffer()), symbol, interval), status: 200, url };
-  } finally {
-    clearTimeout(timer);
+  const path = `data/futures/um/daily/klines/${encodeURIComponent(symbol)}/${encodeURIComponent(interval)}/${file}`;
+  const urls = [
+    `https://data.binance.vision/${path}`,
+    `https://s3-ap-northeast-1.amazonaws.com/data.binance.vision/${path}`
+  ];
+  let lastStatus = 0;
+  for (const url of urls) {
+    try {
+      const r = await fetchBytes(url); lastStatus = r.status;
+      if (r.ok) return { day, rows:parseCsv(r.bytes), status:200 };
+    } catch (e) { lastStatus = 0; }
   }
+  return { day, rows:[], status:lastStatus };
 }
 
 async function getHistorical(symbol, interval, limit) {
-  const jobs = [];
   const today = new Date();
-  // Daily archives are published after the trading day. Start from yesterday
-  // and walk backward so this works even when the current day archive is absent.
-  for (let i = 1; i <= MAX_DAYS; i++) jobs.push(fetchDay(symbol, interval, isoDay(new Date(today.getTime() - i * DAY_MS))));
-  const results = await Promise.all(jobs);
+  const days = Array.from({length:MAX_DAYS}, (_,i)=>isoDay(new Date(today.getTime()-(i+1)*DAY_MS)));
+  const results = await Promise.all(days.map(day=>fetchDay(symbol, interval, day)));
   const map = new Map();
   for (const r of results) for (const k of r.rows) map.set(Number(k[0]), k);
   return [...map.values()].sort((a,b)=>Number(a[0])-Number(b[0])).slice(-limit);
 }
 
 module.exports = async function handler(req, res) {
-  if (req.method !== 'GET') return json(res, 405, { ok:false, error:'GET required' });
+  if (req.method !== 'GET') return json(res, 405, {ok:false,error:'GET required'});
   const symbol = String(req.query?.symbol || 'BTCUSDT').toUpperCase();
   const interval = String(req.query?.interval || '15m');
-  const limit = Math.min(Math.max(Number(req.query?.limit || 260), 1), 1500);
+  const limit = Math.min(Math.max(Number(req.query?.limit || 260),1),1500);
   try {
     const klines = await getHistorical(symbol, interval, limit);
-    if (!klines.length) return json(res, 502, { ok:false, error:'Binance Vision tidak menemukan arsip Futures untuk '+symbol+' '+interval, source:'binance-vision-futures', daysChecked: MAX_DAYS });
-    const last = klines.at(-1);
-    const prev = klines.length > 1 ? klines.at(-2) : last;
-    const lastClose = Number(last[4]), prevClose = Number(prev[4]);
-    const ticker = {
-      symbol,
-      lastPrice: String(lastClose),
-      highPrice: String(Math.max(...klines.map(k=>Number(k[2])))),
-      lowPrice: String(Math.min(...klines.map(k=>Number(k[3])))),
-      volume: String(klines.reduce((a,k)=>a+Number(k[5]),0)),
-      priceChangePercent: String(prevClose ? ((lastClose/prevClose)-1)*100 : 0)
-    };
-    return json(res, 200, { ok:true, symbol, interval, klines, ticker, source:'binance-futures-public-archive' });
-  } catch (err) {
-    return json(res, 502, { ok:false, error:err.message || 'Binance Vision Futures error', source:'binance-futures-public-archive' });
-  }
+    if (!klines.length) return json(res,502,{ok:false,error:`Binance Futures archive tidak mengembalikan candle ${symbol} ${interval}`,source:'binance-futures-public-archive',daysChecked:MAX_DAYS});
+    const last=klines.at(-1), prev=klines.at(-2)||last;
+    const lastClose=Number(last[4]), prevClose=Number(prev[4]);
+    const ticker={symbol,lastPrice:String(lastClose),highPrice:String(Math.max(...klines.map(k=>Number(k[2])))),lowPrice:String(Math.min(...klines.map(k=>Number(k[3])))),volume:String(klines.reduce((a,k)=>a+Number(k[5]),0)),priceChangePercent:String(prevClose?((lastClose/prevClose)-1)*100:0)};
+    return json(res,200,{ok:true,symbol,interval,klines,ticker,source:'binance-futures-public-archive'});
+  } catch(err) { return json(res,502,{ok:false,error:err.message||'Binance Futures archive error',source:'binance-futures-public-archive'}); }
 };

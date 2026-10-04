@@ -78,20 +78,14 @@ async function handler(req, res) {
       );
       if (!candles.length) return json(res, 400, { ok: false, error: 'No valid candles' });
 
-      for (const c of candles) {
-        await sql`
-          INSERT INTO candles (symbol, interval, time, open, high, low, close, volume, closed)
-          VALUES (${symbol}, ${interval}, ${c.time}, ${c.open}, ${c.high}, ${c.low}, ${c.close}, ${c.volume}, ${c.closed})
-          ON CONFLICT (symbol, interval, time) DO UPDATE SET
-            open=EXCLUDED.open,
-            high=EXCLUDED.high,
-            low=EXCLUDED.low,
-            close=EXCLUDED.close,
-            volume=EXCLUDED.volume,
-            closed=EXCLUDED.closed,
-            updated_at=NOW()
-        `;
-      }
+      const queries = candles.map(c => sql`
+        INSERT INTO candles (symbol, interval, time, open, high, low, close, volume, closed)
+        VALUES (${symbol}, ${interval}, ${c.time}, ${c.open}, ${c.high}, ${c.low}, ${c.close}, ${c.volume}, ${c.closed})
+        ON CONFLICT (symbol, interval, time) DO UPDATE SET
+          open=EXCLUDED.open, high=EXCLUDED.high, low=EXCLUDED.low,
+          close=EXCLUDED.close, volume=EXCLUDED.volume, closed=EXCLUDED.closed, updated_at=NOW()
+      `);
+      await sql.transaction(queries);
       return json(res, 200, { ok: true, symbol, interval, saved: candles.length, source: 'neon-postgres' });
     }
 
