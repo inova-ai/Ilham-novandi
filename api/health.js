@@ -1,10 +1,9 @@
-module.exports = async (req, res) => {
-  res.status(200).setHeader('Content-Type', 'application/json');
-  res.end(JSON.stringify({
+module.exports = function handler(req, res) {
+  res.status(200).json({
     ok: true,
     service: 'ilham-novandi-api',
-    version: '8.5.0',
+    version: '8.5.1',
     runtime: 'vercel-node',
     timestamp: new Date().toISOString()
-  }));
+  });
 };
