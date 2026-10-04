@@ -2,38 +2,56 @@ const crypto = require('crypto');
 
 const BASE_URL = process.env.BINANCE_BASE_URL || 'https://fapi.binance.com';
 const MARKET_BASE_URL = process.env.BINANCE_MARKET_BASE_URL || BASE_URL;
+// Binance Futures has several API hostnames. Try them in order so a transient
+// hostname/routing problem does not make the whole market-data path fail.
+const MARKET_BASE_URLS = Array.from(new Set([
+  MARKET_BASE_URL,
+  BASE_URL,
+  'https://fapi1.binance.com',
+  'https://fapi2.binance.com',
+  'https://fapi3.binance.com',
+  'https://fapi4.binance.com'
+]));
 
 function json(res, status, body) {
   res.status(status).setHeader('Cache-Control', 'no-store').json(body);
 }
 
 async function marketFetch(path) {
-  const url = `${MARKET_BASE_URL}${path}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
-  try {
-    const r = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'ilham-novandi/8.5.1'
-      },
-      cache: 'no-store',
-      signal: controller.signal
-    });
-    const text = await r.text();
-    let data;
-    try { data = JSON.parse(text); } catch { data = { raw: text }; }
-    if (!r.ok) {
-      const err = new Error(`Binance HTTP ${r.status}`);
-      err.status = r.status;
-      err.details = data;
-      throw err;
+  let lastError = null;
+  for (const base of MARKET_BASE_URLS) {
+    const url = `${base}${path}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const r = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'ilham-novandi/8.5.1'
+        },
+        cache: 'no-store',
+        signal: controller.signal
+      });
+      const text = await r.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { raw: text }; }
+      if (!r.ok) {
+        const err = new Error(`Binance HTTP ${r.status}`);
+        err.status = r.status;
+        err.details = data;
+        err.base = base;
+        lastError = err;
+        continue;
+      }
+      return data;
+    } catch (err) {
+      lastError = err;
+    } finally {
+      clearTimeout(timer);
     }
-    return data;
-  } finally {
-    clearTimeout(timer);
   }
+  throw lastError || new Error('Binance Futures market data tidak dapat diakses');
 }
 
 function signedQuery(params) {
