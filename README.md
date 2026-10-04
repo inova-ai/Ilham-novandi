@@ -1,4 +1,4 @@
-# ILHAM NOVANDI V8.1 — 15M Smart Entry
+# ILHAM NOVANDI V8.2.1 — 15M Smart Entry
 
 Vercel/Node 24 build with a server-side Binance public market-data proxy. The chart loads 15M candles through `/api/binance?action=market`, with browser WebSocket plus a 5-second polling fallback so the chart can still render when direct Binance browser access is blocked or restricted.
 
@@ -12,3 +12,11 @@ See `.env.example`. Paper mode is the default. Live trading requires server-side
 
 ## Important
 Test on Paper/Testnet first. Trading strategies do not guarantee profit.
+
+
+## V8.2 Chart Fix
+- Candlestick chart no longer depends on an external Lightweight Charts CDN.
+- 15M candlesticks and EMA20 are rendered locally in a responsive canvas.
+- Market data uses the Vercel `/api/binance` proxy first, with a browser fallback to Binance public endpoints.
+- Public market proxy no longer sends an undefined API-key header when API credentials are not configured.
+- Paper mode remains the default.
