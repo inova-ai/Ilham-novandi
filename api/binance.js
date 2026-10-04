@@ -1,6 +1,4 @@
 const crypto = require('crypto');
-const binanceHistory = require('./binance-history');
-
 const BASE_URL = process.env.BINANCE_BASE_URL || 'https://fapi.binance.com';
 const MARKET_BASE_URL = process.env.BINANCE_MARKET_BASE_URL || BASE_URL;
 // Binance Futures has several API hostnames. Try them in order so a transient
@@ -19,40 +17,33 @@ function json(res, status, body) {
 }
 
 async function marketFetch(path) {
-  let lastError = null;
-  for (const base of MARKET_BASE_URLS) {
+  const bases = MARKET_BASE_URLS;
+  const attempts = bases.map(async (base) => {
     const url = `${base}${path}`;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
+    const timer = setTimeout(() => controller.abort(), 2500);
     try {
       const r = await fetch(url, {
         method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'ilham-novandi/8.5.3'
-        },
-        cache: 'no-store',
-        signal: controller.signal
+        headers: { 'Accept': 'application/json', 'User-Agent': 'ilham-novandi/8.5.4' },
+        cache: 'no-store', signal: controller.signal
       });
       const text = await r.text();
-      let data;
-      try { data = JSON.parse(text); } catch { data = { raw: text }; }
+      let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
       if (!r.ok) {
         const err = new Error(`Binance HTTP ${r.status}`);
-        err.status = r.status;
-        err.details = data;
-        err.base = base;
-        lastError = err;
-        continue;
+        err.status = r.status; err.details = data; err.base = base;
+        throw err;
       }
       return data;
-    } catch (err) {
-      lastError = err;
-    } finally {
-      clearTimeout(timer);
-    }
+    } finally { clearTimeout(timer); }
+  });
+  try { return await Promise.any(attempts); }
+  catch (agg) {
+    const reasons = (agg?.errors || []).filter(Boolean);
+    const err = reasons.at(-1) || new Error('Binance Futures market data tidak dapat diakses');
+    throw err;
   }
-  throw lastError || new Error('Binance Futures market data tidak dapat diakses');
 }
 
 function signedQuery(params) {
@@ -67,7 +58,7 @@ async function handler(req, res) {
     return json(res, 200, {
       ok: true,
       service: 'binance-api',
-      version: '8.5.3',
+      version: '8.5.4',
       marketBaseUrl: MARKET_BASE_URL
     });
   }
@@ -93,24 +84,8 @@ async function handler(req, res) {
         source: 'binance-futures-rest'
       });
     } catch (err) {
-      // If Binance Futures REST is blocked (for example HTTP 451), fall back
-      // to Binance's own official USD-M Futures public archive. This is still
-      // Binance Futures data; it is not another exchange.
-      try {
-        const historyReq = { method:'GET', query: {
-          symbol, interval, limit
-        }};
-        let historyResult;
-        const fakeRes = {
-          status(code){ this.code=code; return this; },
-          setHeader(){ return this; },
-          json(body){ historyResult={code:this.code || 200, body}; return this; }
-        };
-        await binanceHistory(historyReq, fakeRes);
-        if (historyResult?.body?.ok) return json(res, 200, historyResult.body);
-      } catch (historyErr) {
-        console.warn('Binance Vision fallback failed:', historyErr.message);
-      }
+      // Do not call the archive handler from inside this serverless function.
+      // The browser will call /api/binance-history directly after this REST failure.
       return json(res, 502, {
         ok: false,
         error: err.message || 'Binance market request failed',
