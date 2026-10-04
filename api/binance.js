@@ -30,7 +30,8 @@ function signature(query) {
 
 async function binance(method, path, params = {}, signed = false) {
   let query = encodeParams(params);
-  const headers = { 'X-MBX-APIKEY': API_KEY };
+  const headers = {};
+  if (API_KEY) headers['X-MBX-APIKEY'] = API_KEY;
   if (signed) {
     query = encodeParams({ ...params, timestamp: Date.now(), recvWindow: 5000 });
     query += '&signature=' + signature(query);
@@ -64,6 +65,23 @@ function validateQuantity(q) {
   const n = Number(q);
   if (!Number.isFinite(n) || n <= 0) throw new Error('Quantity harus lebih besar dari 0.');
   return n;
+}
+
+
+async function publicMarket(symbol, interval='15m', limit=260) {
+  const sym = validateSymbol(symbol);
+  const allowed = new Set(['1m','3m','5m','15m','30m','1h','2h','4h','6h','8h','12h','1d']);
+  if (!allowed.has(interval)) throw new Error('Interval tidak didukung.');
+  const lim = Math.max(1, Math.min(Number(limit) || 260, 500));
+  const [klines, ticker] = await Promise.all([
+    binance('GET', '/fapi/v1/klines', { symbol: sym, interval, limit: lim }, false),
+    binance('GET', '/fapi/v1/ticker/24hr', { symbol: sym }, false),
+  ]);
+  return { symbol: sym, interval, klines, ticker };
+}
+
+async function publicMarket24() {
+  return binance('GET', '/fapi/v1/ticker/24hr', {}, false);
 }
 
 async function account() {
@@ -219,6 +237,8 @@ async function cancelAll(req, symbol) {
 module.exports = async (req, res) => {
   try {
     const action = String(req.query.action || 'status');
+    if (req.method === 'GET' && action === 'market') return json(res, 200, await publicMarket((req.query || {}).symbol || 'BTCUSDT', (req.query || {}).interval || '15m', (req.query || {}).limit || 260));
+    if (req.method === 'GET' && action === 'market24') return json(res, 200, await publicMarket24());
     if (req.method === 'GET' && action === 'status') {
       return json(res, 200, { configured: Boolean(API_KEY && API_SECRET), liveEnabled: LIVE_ENABLED, baseUrl: BASE_URL, maxNotionalUSDT: MAX_NOTIONAL_USDT });
     }
