@@ -1,8 +1,6 @@
-# ILHAM NOVANDI AI TRADING SYSTEM v8.7.1
-
-Binance Futures-only trading terminal with Neon PostgreSQL candle storage.
-
-See `README-NEON.md` for deployment and candle-data architecture.
-
-
-v8.7.1 fixes Binance Futures history bootstrap: official archive is attempted before REST, HTTP 451 fails fast, archive host fallback is included, and Neon candle upserts use a single transaction.
+v8.7.2
+- Binance Futures only.
+- Neon is the candle database.
+- Historical bootstrap uses official Binance Futures daily archives with monthly archive fallback.
+- WebSocket realtime runs independently.
+- Chart displays 70 candles with Supertrend B/S-style lines and H/L markers.
