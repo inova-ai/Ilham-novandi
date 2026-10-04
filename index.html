@@ -132,7 +132,7 @@
       if(r.ok && Array.isArray(data.klines) && data.klines.length) return {...data,source:'vercel-proxy'};
       throw new Error(data.error || ('Proxy HTTP '+r.status));
     } catch(e) {
-      throw new Error('Data Binance tidak dapat diambil. Cek koneksi/VPN dan akses Binance Futures dari jaringan ini.');
+      throw new Error('Binance Futures tidak dapat diakses dari browser maupun server. Pastikan jaringan tidak memblokir Binance.');
     }
   };
   const market24 = async () => { const r=await fetch('/api/binance?action=market24'); const data=await r.json().catch(()=>({error:'Ticker response tidak valid'})); if(!r.ok) throw new Error(data.error||'Ticker proxy error'); return data; };
@@ -231,10 +231,10 @@
       currentData=ks.map(k=>({time:k[0]/1000,open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]})); state.candles=currentData; state.price=+t.lastPrice;state.high=+t.highPrice;state.low=+t.lowPrice;state.vol=+t.volume;
       candleSeries.setData(currentData); const ema=calcEMA(currentData.map(x=>x.close));state.ema20=ema;emaSeries.setData(currentData.map((x,i)=>({time:x.time,value:ema[i]}))); chart.timeScale().fitContent(); updateHeader(t); analyze(); renderSR(); renderOverlay();
     }catch(e){
-      $('ohlc').textContent='Data Binance tidak tersedia';
+      $('ohlc').textContent='Binance: '+e.message;
       $('chartSignal').textContent='BINANCE DATA ERROR';
       drawChart();
-      toast('Gagal memuat market data: '+e.message);
+      toast('Market data gagal: '+e.message);
       console.warn('loadSymbol failed:',e);
     }
   }
@@ -261,7 +261,7 @@
   function wsConnect(){
     if(state.ws)try{state.ws.close()}catch{}; state.interval='15m';
     try{
-      state.ws=new WebSocket('wss://fstream.binance.com/ws/'+state.symbol.toLowerCase()+'@kline_15m');
+      state.ws=new WebSocket('wss://fstream.binance.com/market/ws/'+state.symbol.toLowerCase()+'@kline_15m');
       state.ws.onopen=()=>{realtimeConnected=true;};
       state.ws.onmessage=e=>{try{const m=JSON.parse(e.data);if(!m.k)return;const k=m.k;applyRealtimeCandle({time:k.t/1000,open:+k.o,high:+k.h,low:+k.l,close:+k.c,volume:+k.v},!!k.x);}catch(err){console.warn(err)}};
       state.ws.onerror=()=>{realtimeConnected=false;};
