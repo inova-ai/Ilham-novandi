@@ -59,12 +59,45 @@ async function fetchDay(symbol, interval, day) {
   return { day, rows:[], status:lastStatus };
 }
 
+async function fetchMonth(symbol, interval, year, month) {
+  const mm = String(month).padStart(2, '0');
+  const file = `${symbol}-${interval}-${year}-${mm}.zip`;
+  const path = `data/futures/um/monthly/klines/${encodeURIComponent(symbol)}/${encodeURIComponent(interval)}/${file}`;
+  const urls = [
+    `https://data.binance.vision/${path}`,
+    `https://s3-ap-northeast-1.amazonaws.com/data.binance.vision/${path}`
+  ];
+  let lastStatus = 0;
+  for (const url of urls) {
+    try {
+      const r = await fetchBytes(url); lastStatus = r.status;
+      if (r.ok) return { year, month, rows: parseCsv(r.bytes), status: 200 };
+    } catch (e) { lastStatus = 0; }
+  }
+  return { year, month, rows: [], status: lastStatus };
+}
+
 async function getHistorical(symbol, interval, limit) {
-  const today = new Date();
-  const days = Array.from({length:MAX_DAYS}, (_,i)=>isoDay(new Date(today.getTime()-(i+1)*DAY_MS)));
-  const results = await Promise.all(days.map(day=>fetchDay(symbol, interval, day)));
+  const now = new Date();
   const map = new Map();
-  for (const r of results) for (const k of r.rows) map.set(Number(k[0]), k);
+
+  // Daily files are the freshest official Binance Futures archive. Check the
+  // last 8 completed UTC days, including yesterday. If the newest daily file
+  // has not appeared yet, monthly archives provide a stable history fallback.
+  const dailyDays = Array.from({length: 8}, (_,i) => isoDay(new Date(now.getTime()-(i+1)*DAY_MS)));
+  const dailyResults = await Promise.all(dailyDays.map(day => fetchDay(symbol, interval, day)));
+  for (const r of dailyResults) for (const k of r.rows) map.set(Number(k[0]), k);
+
+  if (map.size < limit) {
+    const months = [];
+    for (let i=0;i<3;i++) {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth()-i, 1));
+      months.push({year:d.getUTCFullYear(), month:d.getUTCMonth()+1});
+    }
+    const monthlyResults = await Promise.all(months.map(x => fetchMonth(symbol, interval, x.year, x.month)));
+    for (const r of monthlyResults) for (const k of r.rows) map.set(Number(k[0]), k);
+  }
+
   return [...map.values()].sort((a,b)=>Number(a[0])-Number(b[0])).slice(-limit);
 }
 
