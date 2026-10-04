@@ -260,7 +260,9 @@
   function update15mCountdown(timeSec){const now=Math.floor(Date.now()/1000), start=timeSec||now, elapsed=Math.max(0,now-start)%900, remain=900-elapsed; const mm=String(Math.floor(remain/60)).padStart(2,'0'),ss=String(remain%60).padStart(2,'0'); $('tfCountdown').textContent=mm+':'+ss; $('tfProgress').style.width=((elapsed/900)*100).toFixed(1)+'%';}
   async function loadSymbol(symbol=state.symbol){ state.interval='15m';
     try{
-      const m=await marketApi(symbol,state.interval,260); const ks=m.klines, t=m.ticker||{};
+      const m=await marketApi(symbol,state.interval,260); const t=m.ticker||{};
+      const ks=Array.isArray(m.klines)?m.klines:(Array.isArray(m.candles)?m.candles.map(c=>[Number(c.time)*1000,c.open,c.high,c.low,c.close,c.volume]):[]);
+      if(!ks.length) throw new Error('Binance tidak mengembalikan candle 15M');
       currentData=ks.map(k=>({time:k[0]/1000,open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]})); state.candles=currentData;
       const last=currentData.at(-1);
       state.price=Number(t.lastPrice||last?.close||0);state.high=Number(t.highPrice||last?.high||0);state.low=Number(t.lowPrice||last?.low||0);state.vol=Number(t.volume||last?.volume||0);
