@@ -109,12 +109,31 @@
   const emaSeries={setData:d=>{emaData=(d||[]).map(x=>x.value);drawChart()},update:x=>{if(emaData.length)emaData[emaData.length-1]=x.value;drawChart()}};
   resizeChartCanvas();
   const toast = msg => { $('toast').textContent=msg; $('toast').classList.add('show'); setTimeout(()=>$('toast').classList.remove('show'),2200); };
-  const api = async (path) => { const r=await fetch('https://fapi.binance.com'+path,{cache:'no-store'}); if(!r.ok) throw new Error('Binance API '+r.status); return r.json(); };
+  const api = async (path) => {
+    const urls = ['https://fapi.binance.com'+path, 'https://fapi.binance.com'+path.replace('/fapi/v1/','/fapi/v1/')];
+    let last;
+    for(const url of urls){ try { const r=await fetch(url,{cache:'no-store',mode:'cors'}); if(!r.ok){last=new Error('Binance API '+r.status);continue;} return await r.json(); } catch(e){last=e;} }
+    throw last || new Error('Binance API tidak dapat diakses');
+  };
   const marketApi = async (symbol=state.symbol, interval='15m', limit=260) => {
     const q='symbol='+encodeURIComponent(symbol)+'&interval='+encodeURIComponent(interval)+'&limit='+limit;
-    try { const r=await fetch('/api/binance?action=market&'+q,{cache:'no-store'}); const data=await r.json().catch(()=>({error:'Market response tidak valid'})); if(r.ok && Array.isArray(data.klines)) return data; } catch(e) {}
-    const [klines,ticker]=await Promise.all([api('/fapi/v1/klines?'+q),api('/fapi/v1/ticker/24hr?symbol='+encodeURIComponent(symbol))]);
-    return {symbol,interval,klines,ticker};
+    // Prefer browser -> Binance directly. This avoids Vercel-region restrictions on Binance Futures REST.
+    try {
+      const [klines,ticker]=await Promise.all([
+        api('/fapi/v1/klines?'+q),
+        api('/fapi/v1/ticker/24hr?symbol='+encodeURIComponent(symbol))
+      ]);
+      if(Array.isArray(klines) && klines.length) return {symbol,interval,klines,ticker,source:'browser-binance'};
+    } catch(e) { console.warn('Direct Binance market failed:',e); }
+    // Fallback to Vercel proxy.
+    try {
+      const r=await fetch('/api/binance?action=market&'+q,{cache:'no-store'});
+      const data=await r.json().catch(()=>({error:'Market response tidak valid'}));
+      if(r.ok && Array.isArray(data.klines) && data.klines.length) return {...data,source:'vercel-proxy'};
+      throw new Error(data.error || ('Proxy HTTP '+r.status));
+    } catch(e) {
+      throw new Error('Data Binance tidak dapat diambil. Cek koneksi/VPN dan akses Binance Futures dari jaringan ini.');
+    }
   };
   const market24 = async () => { const r=await fetch('/api/binance?action=market24'); const data=await r.json().catch(()=>({error:'Ticker response tidak valid'})); if(!r.ok) throw new Error(data.error||'Ticker proxy error'); return data; };
   let pollTimer=null, realtimeConnected=false;
@@ -211,7 +230,13 @@
       const m=await marketApi(symbol,state.interval,260); const ks=m.klines, t=m.ticker;
       currentData=ks.map(k=>({time:k[0]/1000,open:+k[1],high:+k[2],low:+k[3],close:+k[4],volume:+k[5]})); state.candles=currentData; state.price=+t.lastPrice;state.high=+t.highPrice;state.low=+t.lowPrice;state.vol=+t.volume;
       candleSeries.setData(currentData); const ema=calcEMA(currentData.map(x=>x.close));state.ema20=ema;emaSeries.setData(currentData.map((x,i)=>({time:x.time,value:ema[i]}))); chart.timeScale().fitContent(); updateHeader(t); analyze(); renderSR(); renderOverlay();
-    }catch(e){toast('Gagal memuat market data: '+e.message)}
+    }catch(e){
+      $('ohlc').textContent='Data Binance tidak tersedia';
+      $('chartSignal').textContent='BINANCE DATA ERROR';
+      drawChart();
+      toast('Gagal memuat market data: '+e.message);
+      console.warn('loadSymbol failed:',e);
+    }
   }
   function updateHeader(t){$('pairLabel').textContent=state.symbol;$('chartPair').textContent=state.symbol+' · '+state.interval+' · Binance';$('topPrice').textContent=fmtIDR(+t.lastPrice*16000);$('topChange').textContent=(+t.priceChangePercent>=0?'+':'')+Number(t.priceChangePercent).toFixed(2)+'%';$('high24').textContent=fmtIDR(+t.highPrice*16000);$('low24').textContent=fmtIDR(+t.lowPrice*16000);$('vol24').textContent=Number(t.volume).toFixed(0)+' '+state.symbol.replace('USDT','');$('orderPrice').textContent=fmtIDR(+t.lastPrice*16000);$('posNow').textContent=fmtIDR(+t.lastPrice*16000);$('posCurrent').textContent=fmtIDR(+t.lastPrice*16000)}
   function renderSR(){const o=$('overlay');o.querySelectorAll('.sr').forEach(x=>x.remove());if(!currentData.length)return;const highs=currentData.slice(-80).map(x=>x.high), lows=currentData.slice(-80).map(x=>x.low);[Math.max(...highs),Math.min(...lows)].forEach((v,i)=>{const d=document.createElement('div');d.className='sr';d.style.position='absolute';d.style.left='0';d.style.right='0';d.style.top=(i?'88%':'13%');d.style.borderTop='1px dashed '+(i?'#00c98a':'#ffb73a');d.style.opacity='.55';d.style.pointerEvents='none';o.appendChild(d)})}
