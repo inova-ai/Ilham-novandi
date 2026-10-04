@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const binanceHistory = require('./binance-history');
 
 const BASE_URL = process.env.BINANCE_BASE_URL || 'https://fapi.binance.com';
 const MARKET_BASE_URL = process.env.BINANCE_MARKET_BASE_URL || BASE_URL;
@@ -28,7 +29,7 @@ async function marketFetch(path) {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'User-Agent': 'ilham-novandi/8.5.1'
+          'User-Agent': 'ilham-novandi/8.5.2'
         },
         cache: 'no-store',
         signal: controller.signal
@@ -66,7 +67,7 @@ async function handler(req, res) {
     return json(res, 200, {
       ok: true,
       service: 'binance-api',
-      version: '8.5.1',
+      version: '8.5.2',
       marketBaseUrl: MARKET_BASE_URL
     });
   }
@@ -92,11 +93,30 @@ async function handler(req, res) {
         source: 'binance-futures-rest'
       });
     } catch (err) {
+      // If Binance Futures REST is blocked (for example HTTP 451), fall back
+      // to Binance's own official USD-M Futures public archive. This is still
+      // Binance Futures data; it is not another exchange.
+      try {
+        const historyReq = { method:'GET', query: {
+          symbol, interval, limit
+        }};
+        let historyResult;
+        const fakeRes = {
+          status(code){ this.code=code; return this; },
+          setHeader(){ return this; },
+          json(body){ historyResult={code:this.code || 200, body}; return this; }
+        };
+        await binanceHistory(historyReq, fakeRes);
+        if (historyResult?.body?.ok) return json(res, 200, historyResult.body);
+      } catch (historyErr) {
+        console.warn('Binance Vision fallback failed:', historyErr.message);
+      }
       return json(res, 502, {
         ok: false,
         error: err.message || 'Binance market request failed',
         details: err.details || null,
-        marketBaseUrl: MARKET_BASE_URL
+        marketBaseUrl: MARKET_BASE_URL,
+        fallback: 'binance-futures-public-archive'
       });
     }
   }
