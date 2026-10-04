@@ -8,5 +8,15 @@
     "api/health.js": {
       "maxDuration": 10
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/api/binance",
+      "destination": "/api/binance.js"
+    },
+    {
+      "source": "/api/health",
+      "destination": "/api/health.js"
+    }
+  ]
 }
